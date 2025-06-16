@@ -10,7 +10,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Копируем код приложения
-COPY server.py .  # <= убедись, что файл есть в корне
+COPY server.py 
 
 # Создаём папку для вывода
 RUN mkdir -p /app/output
