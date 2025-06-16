@@ -1,17 +1,20 @@
 FROM python:3.11-slim
 
-# Системные утилиты
+# Устанавливаем необходимые системные пакеты
 RUN apt-get update && apt-get install -y gdal-bin poppler-utils
 
-# Python-зависимости
+# Копируем зависимости
 COPY requirements.txt .
+
+# Устанавливаем зависимости Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Приложение
-COPY server.py .
+# Копируем код приложения
+COPY server.py .  # <= убедись, что файл есть в корне
 
-# Папка для результатов
+# Создаём папку для вывода
 RUN mkdir -p /app/output
 WORKDIR /app
 
+# Запуск сервера
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "10000"]
