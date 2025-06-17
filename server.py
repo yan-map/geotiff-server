@@ -20,36 +20,32 @@ async def render_pdf_to_geotiff(
             f.write(await pdf.read())
 
         coords = [list(map(float, pt.split(","))) for pt in [tl, tr, br, bl]]
+        minx = min(c[0] for c in coords)
+        maxx = max(c[0] for c in coords)
+        miny = min(c[1] for c in coords)
+        maxy = max(c[1] for c in coords)
+
         lat = sum(c[1] for c in coords) / 4
         res = 156543.03 * math.cos(math.radians(lat)) / (2 ** zoom)
         dpi = int(round(0.0254 / res))
 
-        img = convert_from_path(pdf_path, dpi=dpi, fmt="png", transparent=True, single_file=True)[0]
+        img = convert_from_path(pdf_path, dpi=dpi, fmt="png",
+                                transparent=True, single_file=True)[0]
         png_path = os.path.join(tmpdir, "out.png")
         img.save(png_path, "PNG")
-
-        # VRT с GCP
-        vrt_path = os.path.join(tmpdir, "out.vrt")
-        gcp_list = ""
-        pdf_width, pdf_height = img.size
-        for i, (lon, lat) in enumerate(coords):
-            px, py = [(0, 0), (pdf_width, 0), (pdf_width, pdf_height), (0, pdf_height)][i]
-            gcp_list += f"-gcp {px} {py} {lon} {lat} "
-
-        subprocess.run(
-            f"gdal_translate -of VRT {gcp_list} {png_path} {vrt_path}",
-            shell=True, check=True
-        )
 
         output_path = Path("output/output.tif")
         output_path.parent.mkdir(exist_ok=True)
 
         subprocess.run([
-            "gdalwarp",
-            "-t_srs", "EPSG:4326",
-            "-r", "bilinear",
-            "-dstalpha",
-            vrt_path,
+            "gdal_translate",
+            "-of", "GTiff",
+            "-a_ullr", str(minx), str(maxy), str(maxx), str(miny),
+            "-a_srs", "EPSG:4326",
+            "-co", "TILED=YES",
+            "-co", "COMPRESS=DEFLATE",
+            "-co", "ALPHA=YES",
+            png_path,
             str(output_path)
         ], check=True)
 

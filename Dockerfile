@@ -1,13 +1,13 @@
 FROM python:3.11-slim
 
-RUN apt-get update && apt-get install -y gdal-bin poppler-utils
+RUN apt update && apt install -y \
+    gdal-bin \
+    poppler-utils \
+    && pip install --no-cache-dir \
+    fastapi uvicorn pdf2image python-multipart requests
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY server.py .
-
-RUN mkdir -p /app/output
 WORKDIR /app
+COPY . /app
 
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "10000"]
+EXPOSE 8000
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
