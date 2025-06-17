@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import FileResponse
 from pdf2image import convert_from_path
@@ -23,13 +24,14 @@ async def render_pdf_to_geotiff(
         with open(pdf_path, "wb") as f:
             f.write(await pdf.read())
 
-        coords = [list(map(float, pt.split(","))) for pt in [tl, tr, br, bl]]
-        minx = min(c[0] for c in coords)
-        maxx = max(c[0] for c in coords)
-        miny = min(c[1] for c in coords)
-        maxy = max(c[1] for c in coords)
+        coords = {
+            "tl": list(map(float, tl.split(","))),
+            "tr": list(map(float, tr.split(","))),
+            "br": list(map(float, br.split(","))),
+            "bl": list(map(float, bl.split(","))),
+        }
 
-        lat = sum(c[1] for c in coords) / 4
+        lat = sum(pt[1] for pt in coords.values()) / 4
         res = 156543.03 * math.cos(math.radians(lat)) / (2 ** zoom)
         dpi = int(round(0.0254 / res))
         dpi = max(72, min(dpi, 300))
@@ -42,25 +44,38 @@ async def render_pdf_to_geotiff(
         img.save(png_path, "PNG")
 
         base_name = Path(pdf.filename).stem
-        tif_filename = f"{base_name}_georeferenced.tif"
-        tif_tmp_path = os.path.join(tmpdir, tif_filename)
+        tif_raw_path = os.path.join(tmpdir, f"{base_name}_raw.tif")
+        tif_final_name = f"{base_name}_georeferenced.tif"
+        tif_final_path = os.path.join("output", tif_final_name)
+        os.makedirs("output", exist_ok=True)
 
+        # Преобразуем PNG в TIFF
+        subprocess.run(["gdal_translate", png_path, tif_raw_path], check=True)
+
+        width, height = img.size
+
+        # Добавляем GCP (гео-контрольные точки)
+        gcp_args = [
+            "-gcp", "0", "0", *map(str, coords["tl"]),
+            "-gcp", str(width), "0", *map(str, coords["tr"]),
+            "-gcp", str(width), str(height), *map(str, coords["br"]),
+            "-gcp", "0", str(height), *map(str, coords["bl"]),
+        ]
+
+        tif_gcp_path = os.path.join(tmpdir, "with_gcps.vrt")
+        subprocess.run(["gdal_translate"] + gcp_args + [tif_raw_path, tif_gcp_path], check=True)
+
+        # Применяем GCP и пересчёт в EPSG:4326
         subprocess.run([
-            "gdal_translate",
-            "-of", "GTiff",
-            "-a_ullr", str(minx), str(maxy), str(maxx), str(miny),
-            "-a_srs", "EPSG:4326",
-            png_path,
-            tif_tmp_path
+            "gdalwarp",
+            "-t_srs", "EPSG:4326",
+            "-r", "bilinear",
+            "-overwrite",
+            tif_gcp_path,
+            tif_final_path
         ], check=True)
 
-        # Сохраняем в постоянное место
-        output_dir = "output"
-        os.makedirs(output_dir, exist_ok=True)
-        final_path = os.path.join(output_dir, tif_filename)
-        os.rename(tif_tmp_path, final_path)
-
-        print(f"GeoTIFF saved: {final_path}")
+        print(f"GeoTIFF saved: {tif_final_path}")
         print(f"Total time: {time.time() - start:.2f}s")
 
-        return FileResponse(final_path, media_type="image/tiff", filename=tif_filename)
+        return FileResponse(tif_final_path, media_type="image/tiff", filename=tif_final_name)
