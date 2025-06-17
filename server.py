@@ -31,8 +31,7 @@ async def render_pdf_to_geotiff(
         lat = sum(c[1] for c in coords) / 4
         res = 156543.03 * math.cos(math.radians(lat)) / (2 ** zoom)
         dpi = int(round(0.0254 / res))
-        if dpi > 300:
-            dpi = 300  # защитный лимит
+        dpi = max(72, min(dpi, 600))  # допущенный диапазон
 
         print(f"Rendering PDF at dpi={dpi} for zoom={zoom}")
         img = convert_from_path(pdf_path, dpi=dpi, fmt="png", transparent=True, single_file=True)[0]
@@ -41,12 +40,25 @@ async def render_pdf_to_geotiff(
         png_path = os.path.join(tmpdir, "out.png")
         img.save(png_path, "PNG")
 
-        # GDAL отключен временно
-        print(f"Finished in {time.time() - start:.2f}s")
+        # Преобразуем PNG в GeoTIFF через gdal_translate
+        tif_path = os.path.join("output", "output.tif")
+        os.makedirs("output", exist_ok=True)
+
+        subprocess.run([
+            "gdal_translate",
+            "-of", "GTiff",
+            "-a_ullr", str(minx), str(maxy), str(maxx), str(miny),
+            "-a_srs", "EPSG:4326",
+            png_path,
+            tif_path
+        ], check=True)
+
+        print(f"GeoTIFF saved: {tif_path}")
+        print(f"Total time: {time.time() - start:.2f}s")
 
         return {
             "status": "ok",
             "dpi": dpi,
             "image_size": img.size,
-            "note": "GeoTIFF generation temporarily disabled for debugging"
+            "tif": tif_path
         }
