@@ -1,10 +1,10 @@
 from fastapi import FastAPI, File, Form, UploadFile
 from pdf2image import convert_from_path
-import os, tempfile, subprocess, math
-from pathlib import Path
 from PIL import Image
-Image.MAX_IMAGE_PIXELS = None
+import os, tempfile, subprocess, math, time
+from pathlib import Path
 
+Image.MAX_IMAGE_PIXELS = None
 app = FastAPI()
 
 @app.post("/render")
@@ -16,6 +16,7 @@ async def render_pdf_to_geotiff(
     bl: str = Form(...),
     zoom: int = Form(...)
 ):
+    start = time.time()
     with tempfile.TemporaryDirectory() as tmpdir:
         pdf_path = os.path.join(tmpdir, "input.pdf")
         with open(pdf_path, "wb") as f:
@@ -30,29 +31,22 @@ async def render_pdf_to_geotiff(
         lat = sum(c[1] for c in coords) / 4
         res = 156543.03 * math.cos(math.radians(lat)) / (2 ** zoom)
         dpi = int(round(0.0254 / res))
+        if dpi > 300:
+            dpi = 300  # защитный лимит
 
-        img = convert_from_path(pdf_path, dpi=dpi, fmt="png",
-                                transparent=True, single_file=True)[0]
+        print(f"Rendering PDF at dpi={dpi} for zoom={zoom}")
+        img = convert_from_path(pdf_path, dpi=dpi, fmt="png", transparent=True, single_file=True)[0]
+        print(f"Image rendered: size={img.size}")
+
         png_path = os.path.join(tmpdir, "out.png")
         img.save(png_path, "PNG")
 
-        output_path = Path("output/output.tif")
-        output_path.parent.mkdir(exist_ok=True)
-
-        subprocess.run([
-            "gdal_translate",
-            "-of", "GTiff",
-            "-a_ullr", str(minx), str(maxy), str(maxx), str(miny),
-            "-a_srs", "EPSG:4326",
-            "-co", "TILED=YES",
-            "-co", "COMPRESS=DEFLATE",
-            "-co", "ALPHA=YES",
-            png_path,
-            str(output_path)
-        ], check=True)
+        # GDAL отключен временно
+        print(f"Finished in {time.time() - start:.2f}s")
 
         return {
             "status": "ok",
             "dpi": dpi,
-            "file": str(output_path.resolve())
+            "image_size": img.size,
+            "note": "GeoTIFF generation temporarily disabled for debugging"
         }

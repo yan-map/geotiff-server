@@ -4,7 +4,7 @@ RUN apt update && apt install -y \
     gdal-bin \
     poppler-utils \
     && pip install --no-cache-dir \
-    fastapi uvicorn pdf2image python-multipart requests
+    fastapi uvicorn pdf2image python-multipart requests Pillow
 
 WORKDIR /app
 COPY . /app

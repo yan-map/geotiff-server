@@ -3,3 +3,4 @@ uvicorn
 pdf2image
 python-multipart
 requests
+Pillow
