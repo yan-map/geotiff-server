@@ -43,7 +43,7 @@ async def render_pdf_to_geotiff(
 
         base_name = Path(pdf.filename).stem
         tif_filename = f"{base_name}_georeferenced.tif"
-        tif_path = os.path.join(tmpdir, tif_filename)
+        tif_tmp_path = os.path.join(tmpdir, tif_filename)
 
         subprocess.run([
             "gdal_translate",
@@ -51,10 +51,16 @@ async def render_pdf_to_geotiff(
             "-a_ullr", str(minx), str(maxy), str(maxx), str(miny),
             "-a_srs", "EPSG:4326",
             png_path,
-            tif_path
+            tif_tmp_path
         ], check=True)
 
-        print(f"GeoTIFF saved: {tif_path}")
+        # Сохраняем в постоянное место
+        output_dir = "output"
+        os.makedirs(output_dir, exist_ok=True)
+        final_path = os.path.join(output_dir, tif_filename)
+        os.rename(tif_tmp_path, final_path)
+
+        print(f"GeoTIFF saved: {final_path}")
         print(f"Total time: {time.time() - start:.2f}s")
 
-        return FileResponse(tif_path, media_type="image/tiff", filename=tif_filename)
+        return FileResponse(final_path, media_type="image/tiff", filename=tif_filename)
