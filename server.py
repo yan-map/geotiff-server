@@ -1,4 +1,5 @@
 from fastapi import FastAPI, File, Form, UploadFile
+from fastapi.responses import FileResponse
 from pdf2image import convert_from_path
 from PIL import Image
 import os, tempfile, subprocess, math, time
@@ -31,7 +32,7 @@ async def render_pdf_to_geotiff(
         lat = sum(c[1] for c in coords) / 4
         res = 156543.03 * math.cos(math.radians(lat)) / (2 ** zoom)
         dpi = int(round(0.0254 / res))
-        dpi = max(72, min(dpi, 600))  # допущенный диапазон
+        dpi = max(72, min(dpi, 300))
 
         print(f"Rendering PDF at dpi={dpi} for zoom={zoom}")
         img = convert_from_path(pdf_path, dpi=dpi, fmt="png", transparent=True, single_file=True)[0]
@@ -40,9 +41,9 @@ async def render_pdf_to_geotiff(
         png_path = os.path.join(tmpdir, "out.png")
         img.save(png_path, "PNG")
 
-        # Преобразуем PNG в GeoTIFF через gdal_translate
-        tif_path = os.path.join("output", "output.tif")
-        os.makedirs("output", exist_ok=True)
+        base_name = Path(pdf.filename).stem
+        tif_filename = f"{base_name}_georeferenced.tif"
+        tif_path = os.path.join(tmpdir, tif_filename)
 
         subprocess.run([
             "gdal_translate",
@@ -56,9 +57,4 @@ async def render_pdf_to_geotiff(
         print(f"GeoTIFF saved: {tif_path}")
         print(f"Total time: {time.time() - start:.2f}s")
 
-        return {
-            "status": "ok",
-            "dpi": dpi,
-            "image_size": img.size,
-            "tif": tif_path
-        }
+        return FileResponse(tif_path, media_type="image/tiff", filename=tif_filename)
