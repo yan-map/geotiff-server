@@ -2,6 +2,8 @@ from fastapi import FastAPI, File, Form, UploadFile
 from pdf2image import convert_from_path
 import os, tempfile, subprocess, math
 from pathlib import Path
+from PIL import Image
+Image.MAX_IMAGE_PIXELS = None
 
 app = FastAPI()
 
